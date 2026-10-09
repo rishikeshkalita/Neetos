@@ -13,27 +13,85 @@ Current checklist: ${JSON.stringify(tasks).slice(0,3500)}\nRecent daily history 
 Existing study record: ${JSON.stringify(study).slice(0,12000)}
 Return ONLY valid JSON: {"reply":"student-facing Markdown","study":{"goal":null or {"title":"...","details":"...","updatedAt":"YYYY-MM-DD"},"profileSummary":"durable class schedule, travel, daily availability, constraints, strengths and weaknesses","activePlan":null or {"title":"...","details":"...","updatedAt":"YYYY-MM-DD"},"milestones":[{"title":"...","details":"...","status":"not_started|in_progress|done"}],"notes":[{"title":"...","details":"...","updatedAt":"YYYY-MM-DD"}],"dailyChecklist":[{"task":"specific actionable task","taskId":"stable-id-if-known","subject":"Biology|Chemistry|Physics|General","durationMinutes":45,"done":false,"status":"planned|completed|partially_completed|missed|postponed|cancelled|unknown","date":"YYYY-MM-DD","reason":"optional scheduling reason"}],"tests":[{"title":"test name","date":"YYYY-MM-DD","syllabus":"concise subject/topic list","status":"upcoming|done","score":"optional total score","subjectScores":{"Physics":0,"Chemistry":0,"Biology":0},"correct":0,"incorrect":0,"unanswered":0,"weakTopics":["optional chapter/topic"],"mistakes":["optional concise error pattern"],"analysisNotes":"optional evidence-based analysis"}],"syllabus":[{"subject":"...","topic":"chapter/topic","status":"not_started|in_progress|done","completedAt":"YYYY-MM-DD"}],"revisions":[{"id":"stable-id","subject":"Physics|Chemistry|Biology","topic":"...","completedAt":"YYYY-MM-DD","intervalDays":1,"dueDate":"YYYY-MM-DD","status":"scheduled|completed"}]}}. Keep lists concise. Carry forward valid records and today's task completion state unless changed. Preserve stable task IDs where possible. Use taskHistory to identify repeated missed topics and workload issues. Prioritize overdue test-critical tasks, but reschedule only a realistic subset and explain what was deferred. Never convert old missed tasks to completed. Do not include past-day tasks in today's checklist. When a test is reported, store it and its topics; when the schedule changes, regenerate today's checklist. When a syllabus topic is completed, use your judgment to decide when and how it should be revised based on recency, difficulty, test dates, previous revision outcomes, and the student's actual daily capacity. You—not fixed rules in the app—own the revision schedule. Add or update revision records only when useful, and turn the revisions that matter today into a small number of actionable dailyChecklist tasks. Avoid a large permanent revision queue; balance new classes, same-day class revision, older weak topics, upcoming tests, and unfinished work. Do not invent mock-test scores; if a score is supplied, save it in the test record and preserve subject breakdowns, correct/incorrect/unanswered counts, weak topics, mistake patterns, and analysis notes when available. Do not fabricate missing subject scores or question counts; omit unknown fields. Never claim saved changes unless returned in this JSON. Keep daily task count to a realistic maximum of 12 and each task duration between 5 and 600 minutes.`;
  const contents=[];
- for(const m of (Array.isArray(history)?history:[]).slice(-16)){if(!m||!['user','assistant'].includes(m.role)||typeof m.content!=='string')continue;contents.push({role:m.role==='assistant'?'model':'user',parts:[{text:m.content.slice(0,5000)}]});}
- contents.push({role:'user',parts:[{text:message.trim().slice(0,5000)}]});
+ const normalizedHistory=[];
+ const transientFailure=/^(?:Could not connect to NEETOS\\.|The mentor service could not be reached\\.|You appear to be offline\\.|Gemini (?:request failed|is temporarily overloaded|rejected|free-tier|rate-limiting)|Could not reach the Gemini provider|The AI provider is temporarily overloaded|Network error while contacting the AI provider)/i;
+ for(const m of (Array.isArray(history)?history:[]).slice(-16)){
+  if(!m||!['user','assistant'].includes(m.role)||typeof m.content!=='string'||!m.content.trim())continue;
+  if(m.role==='assistant'&&transientFailure.test(m.content.trim()))continue;
+  const role=m.role==='assistant'?'model':'user';
+  const content=m.content.trim().slice(0,2200);
+  const previous=normalizedHistory[normalizedHistory.length-1];
+  if(previous&&previous.role===role)previous.parts[0].text+='\\n\\n'+content;
+  else normalizedHistory.push({role,parts:[{text:content}]});
+ }
+ while(normalizedHistory.length&&normalizedHistory[0].role==='model')normalizedHistory.shift();
+ contents.push(...normalizedHistory.slice(-16));
+ const latest=message.trim().slice(0,5000);
+ const last=contents[contents.length-1];
+ if(last&&last.role==='user')last.parts[0].text+='\\n\\nLatest message: '+latest;
+ else contents.push({role:'user',parts:[{text:latest}]});
+
  try{
-  const endpoint='https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key='+encodeURIComponent(key);
-  const body=JSON.stringify({systemInstruction:{parts:[{text:system}]},contents,generationConfig:{temperature:.35,maxOutputTokens:2200,responseMimeType:'application/json'}});
-  let r,data={};
-  for(let attempt=0;attempt<3;attempt++){
-   try{r=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body});data=await r.json().catch(()=>({}));}
-   catch(e){if(attempt<2){await new Promise(resolve=>setTimeout(resolve,500*(attempt+1)));continue;}throw e;}
-   if(r.ok||![429,500,502,503,504].includes(r.status)||attempt===2)break;
-   await new Promise(resolve=>setTimeout(resolve,650*(attempt+1)));
+  const models=[process.env.GEMINI_MODEL||'gemini-3.8-flash','gemini-3.6-flash'].filter((model,index,list)=>model&&list.indexOf(model)===index);
+  const body=JSON.stringify({
+   systemInstruction:{parts:[{text:system}]},
+   contents,
+   generationConfig:{maxOutputTokens:4096,responseMimeType:'application/json',thinkingConfig:{thinkingLevel:'low'}}
+  });
+  const transientStatuses=[429,500,502,503,504];
+  let raw='',lastStatus=0,lastDetail='No response from Gemini.',lastNetworkError=false;
+  for(const model of models){
+   for(let attempt=0;attempt<2;attempt++){
+    const controller=new AbortController();
+    const timer=setTimeout(()=>controller.abort(),12000);
+    let r,data={};
+    try{
+     r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(model)+':generateContent',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-goog-api-key':key},
+      body,
+      signal:controller.signal
+     });
+     data=await r.json().catch(()=>({}));
+    }catch(e){
+     lastStatus=0;
+     lastNetworkError=true;
+     lastDetail=e&&e.name==='AbortError'?'The Gemini request timed out.':'Could not reach the Gemini provider.';
+     console.error('NEETOS Gemini transport failure model='+model+' attempt='+(attempt+1)+' kind='+(e&&e.name||'Error'));
+     if(attempt===0){await new Promise(resolve=>setTimeout(resolve,350));continue;}
+     break;
+    }finally{clearTimeout(timer);}
+    if(r.ok){
+     raw=(data.candidates||[]).flatMap(c=>c.content?.parts||[]).map(p=>p.text||'').join('\n').trim();
+     if(raw)break;
+     lastStatus=502;
+     lastDetail='Gemini returned an empty response.';
+     console.error('NEETOS Gemini empty response model='+model);
+     break;
+    }
+    lastStatus=r.status;
+    lastNetworkError=false;
+    lastDetail=(data&&data.error&&data.error.message)||'Unknown provider error';
+    console.error('NEETOS Gemini API error model='+model+' status='+r.status+' '+JSON.stringify(data).slice(0,700));
+    if(r.status===401||r.status===403){
+     return res.status(503).json({error:'Gemini rejected the configured API key or permissions. Check GEMINI_API_KEY in Vercel.'});
+    }
+    if(transientStatuses.includes(r.status)){
+     if(attempt===0){await new Promise(resolve=>setTimeout(resolve,350));continue;}
+     break;
+    }
+    // A model-specific 400/404 can be bypassed by the supported fallback model.
+    if((r.status===400||r.status===404)&&model!==models[models.length-1])break;
+    break;
+   }
+   if(raw)break;
   }
-  let raw='';
-  if(r&&r.ok)raw=(data.candidates||[]).flatMap(c=>c.content?.parts||[]).map(p=>p.text||'').join('\\n').trim();
-  else console.error('NEETOS Gemini API error',r&&r.status,JSON.stringify(data).slice(0,1200));
   if(!raw){
-   const status=(r&&r.status)||502,detail=(data&&data.error&&data.error.message)||'Unknown provider error';
-   if(status===429)return res.status(429).json({error:'Gemini free-tier rate limit reached. Wait a little and retry; your saved plan was not changed.'});
-   if(status===503||status===504)return res.status(503).json({error:'Gemini is temporarily overloaded after automatic retries. Your saved plan was not changed; retry in a minute.'});
-   if(status===401||status===403)return res.status(503).json({error:'Gemini rejected the API key or its permissions. Check GEMINI_API_KEY in Vercel.'});
-   return res.status(502).json({error:'Gemini request failed ('+status+'): '+String(detail).slice(0,220)});
+   if(lastStatus===429)return res.status(429).json({error:'The AI provider is rate-limiting requests. Wait briefly and retry; your saved plan was not changed.'});
+   if(lastStatus===503||lastStatus===504)return res.status(503).json({error:'The AI provider is temporarily overloaded. NEETOS retried and tried its fallback model; your saved plan was not changed. Retry shortly.'});
+   if(lastNetworkError)return res.status(502).json({error:lastDetail+' NEETOS tried its available models, but could not get a response. Your saved plan was not changed.'});
+   if(lastStatus===404)return res.status(503).json({error:'Neither configured Gemini model is available to this API key. Check model access in Google AI Studio.'});
+   return res.status(502).json({error:'Gemini request failed ('+(lastStatus||'unknown status')+'): '+String(lastDetail).slice(0,220)+'. Your saved plan was not changed.'});
   }
   let parsed;
   try{parsed=JSON.parse(raw)}catch(e){
