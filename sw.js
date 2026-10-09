@@ -1,4 +1,4 @@
-const CACHE='neetos-shell-v6';
+const CACHE='neetos-shell-v7';
 const SHELL=['/','/manifest.json'];
 const STATIC_EXT=/\.(?:css|js|png|svg|webp|ico|woff2?)$/i;
 self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(SHELL)).then(()=>self.skipWaiting())));
