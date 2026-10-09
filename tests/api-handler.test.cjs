@@ -45,7 +45,7 @@ const request = body => ({ method: 'POST', body: { message: 'Hi', history: [], p
     assert.equal(calls[0].url.includes('?key='), false);
     const config = JSON.parse(calls[0].options.body).generationConfig;
     assert.equal(Object.hasOwn(config, 'temperature'), false);
-    assert.equal(config.thinkingConfig.thinkingLevel, 'low');
+    assert.equal(config.thinkingConfig.thinkingLevel, 'medium');
   }
   {
     const calls = [];
