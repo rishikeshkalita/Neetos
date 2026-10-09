@@ -1,0 +1,11 @@
+{
+  "name": "NEETOS — Your NEET mentor",
+  "short_name": "NEETOS",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f8faf7",
+  "theme_color": "#f8faf7",
+  "description": "Your personal NEET study mentor",
+  "icons": []
+}
