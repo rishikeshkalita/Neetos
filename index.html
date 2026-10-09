@@ -91,7 +91,7 @@ if(!Array.isArray(tasks))tasks=[];
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function persist(){localStorage.setItem(KEYS.profile,JSON.stringify(profile));localStorage.setItem(KEYS.chat,JSON.stringify(history));localStorage.setItem(KEYS.tasks,JSON.stringify(tasks));localStorage.setItem(KEYS.history,JSON.stringify(taskHistory));localStorage.setItem(KEYS.study,JSON.stringify(study));}
 function localDay(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
-function archivePreviousDay(){const today=localDay(),active=localStorage.getItem(KEYS.day);if(!active){localStorage.setItem(KEYS.day,today);tasks=tasks.map(t=>({...t,date:t.date||today,status:t.status||(t.done?'completed':'planned')}));persist();return}if(active!==today){if(!taskHistory.some(r=>r.date===active)){taskHistory.push({date:active,tasks:tasks.map(t=>({...t,status:t.done?'completed':(['postponed','partially_completed','missed','cancelled'].includes(t.status)?t.status:'unknown'),outcomeConfirmed:!!t.done||['postponed','partially_completed','missed','cancelled'].includes(t.status)})),archivedAt:new Date().toISOString()});taskHistory=taskHistory.slice(-180)}tasks=tasks.filter(t=>t.date===today);if(!tasks.length)tasks=[];localStorage.setItem(KEYS.day,today);persist()}tasks=tasks.map(t=>({...t,date:t.date||today,status:t.status||(t.done?'completed':'planned')}));}
+function archivePreviousDay(){const today=localDay(),active=localStorage.getItem(KEYS.day);if(!active){localStorage.setItem(KEYS.day,today);tasks=tasks.map(t=>({...t,date:t.date||today,status:t.status||(t.done?'completed':'planned')}));persist();return}if(active!==today){if(tasks.length){taskHistory.push({date:active,tasks:tasks.map(t=>({...t,status:t.done?'completed':(['postponed','partially_completed','missed','cancelled'].includes(t.status)?t.status:'unknown'),outcomeConfirmed:!!t.done||['postponed','partially_completed','missed','cancelled'].includes(t.status)})),archivedAt:new Date().toISOString()});taskHistory=taskHistory.slice(-180)}tasks=tasks.filter(t=>t.date===today);if(!tasks.length)tasks=[];localStorage.setItem(KEYS.day,today);persist()}tasks=tasks.map(t=>({...t,date:t.date||today,status:t.status||(t.done?'completed':'planned')}));}
 function status(s){$('syncStatus').textContent=s}
 function note(id,s){$(id).textContent=s}
 function fillProfile(){ $('studentName').value=profile.name||'';$('targetYear').value=profile.targetYear||'';$('dailyHours').value=profile.dailyHours||6}
@@ -125,7 +125,7 @@ $('sendBtn').onclick=send;$('input').addEventListener('keydown',e=>{if(e.key==='
 
 /* Reliability wave: deterministic records, review dates, validation and conflict-safe merging. */
 function isoDay(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
-function addDays(day,n){const d=new Date((day||localDay())+'T12:00:00');d.setDate(d.getDate()+n);return isoDay(d)}
+function addDays(day,n){const safeDay=typeof day==='string'&&/^\\d{4}-\\d{2}-\\d{2}$/.test(day)?day:localDay();const d=new Date(safeDay+'T12:00:00');if(Number.isNaN(d.getTime()))return addDays(localDay(),n);d.setDate(d.getDate()+n);return isoDay(d)}
 function ensureRevisionQueue(previousStudy){
   study.revisions=Array.isArray(study.revisions)?study.revisions:[];
   const oldDone=new Set((previousStudy?.syllabus||[]).filter(x=>x.status==='done').map(x=>(x.subject||'General')+'::'+(x.topic||x.title||'').trim().toLowerCase()));
@@ -190,6 +190,8 @@ function mergeCloudSnapshot(data){
 
 archivePreviousDay();fillProfile();renderTasks();renderMessages();renderStudy();persist();
 if(db){db.auth.getSession().then(async({data,error})=>{if(error){note('authNotice',error.message);return}session=data.session;setAuthUI();if(session){await loadCloud();if(!tasks.length)await generateDailyPlan('after cloud sync')}else if(!tasks.length)await generateDailyPlan('daily startup')});db.auth.onAuthStateChange((event,s)=>{session=s;setAuthUI();if(event==='SIGNED_IN'&&s)setTimeout(async()=>{await loadCloud();if(!tasks.length)await generateDailyPlan('after cloud sync')},0)});}
+window.addEventListener('online',()=>{if(session&&db)saveCloud()});
+window.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&session&&db&&navigator.onLine)saveCloud()});
 if('serviceWorker'in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));
 })();
 </script></body></html>
