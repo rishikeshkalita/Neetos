@@ -1,16 +1,26 @@
-// Lightweight source-contract checks. Run with: node tests/reliability-contract.test.cjs
+// Run with: node tests/reliability-contract.test.cjs
 const fs = require('node:fs');
 const assert = require('node:assert/strict');
 const html = fs.readFileSync('index.html','utf8');
 const api = fs.readFileSync('api/chat.js','utf8');
 const sw = fs.readFileSync('sw.js','utf8');
-assert.match(html, /status:t\.done\?'completed':\(\['postponed','partially_completed','missed','cancelled'\]\.includes\(t\.status\)\?t\.status:'unknown'\)/);
-assert.match(html, /function ensureRevisionQueue/);
-assert.match(html, /\[3,7,14,30\]/);
-assert.match(html, /function mergeCloudSnapshot/);
-assert.match(html, /The AI returned an invalid task/);
-assert.match(api, /message\.length>5000/);
-assert.match(api, /daily task count to a realistic maximum of 12/);
-assert.match(sw, /neetos-shell-v6/);
-assert.match(sw, /request\.mode==='navigate'/);
-console.log('NEETOS reliability source-contract checks passed.');
+assert.match(html, /function hasStudyContext\(\)/);
+assert.match(html, /function removeLegacyGenericPlan\(\)/);
+assert.match(html, /function mentorFetch\(payload\)/);
+assert.match(html, /No plan yet\. Tell NEETOS about your coaching\/classes/);
+assert.match(html, /generateDailyPlan\('after profile update'\)/);
+assert.doesNotMatch(html, /function ensureRevisionQueue/);
+assert.doesNotMatch(html, /id="revisionQueue"/);
+assert.match(api, /gemini-3\.8-flash/);
+assert.match(api, /gemini-3\.6-flash/);
+assert.match(api, /x-goog-api-key/);
+assert.match(api, /AbortController/);
+assert.match(api, /thinkingLevel:'low'/);
+assert.doesNotMatch(api, /temperature\s*:/);
+assert.match(api, /normalizedHistory/);
+assert.match(sw, /neetos-shell-v7/);
+const inlineScripts = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)].map(m => m[1]).filter(s => s.trim());
+assert.equal(inlineScripts.length, 1);
+for (const script of inlineScripts) new Function(script);
+new Function(api.replace(/^export default async function handler/m, 'async function handler'));
+console.log('NEETOS source-contract checks passed.');
