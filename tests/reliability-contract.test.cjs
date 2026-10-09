@@ -15,7 +15,7 @@ assert.match(api, /gemini-3\.8-flash/);
 assert.match(api, /gemini-3\.6-flash/);
 assert.match(api, /x-goog-api-key/);
 assert.match(api, /AbortController/);
-assert.match(api, /thinkingLevel:'low'/);
+assert.match(api, /thinkingLevel:'medium'/);
 assert.doesNotMatch(api, /temperature\s*:/);
 assert.match(api, /normalizedHistory/);
 assert.match(sw, /neetos-shell-v7/);
