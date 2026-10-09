@@ -36,14 +36,14 @@ Return ONLY valid JSON: {"reply":"student-facing Markdown","study":{"goal":null 
   const body=JSON.stringify({
    systemInstruction:{parts:[{text:system}]},
    contents,
-   generationConfig:{maxOutputTokens:4096,responseMimeType:'application/json',thinkingConfig:{thinkingLevel:'low'}}
+   generationConfig:{maxOutputTokens:6144,responseMimeType:'application/json',thinkingConfig:{thinkingLevel:'medium'}}
   });
   const transientStatuses=[429,500,502,503,504];
   let raw='',lastStatus=0,lastDetail='No response from Gemini.',lastNetworkError=false;
   for(const model of models){
    for(let attempt=0;attempt<2;attempt++){
     const controller=new AbortController();
-    const timer=setTimeout(()=>controller.abort(),12000);
+    const timer=setTimeout(()=>controller.abort(),15000);
     let r,data={};
     try{
      r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(model)+':generateContent',{
@@ -58,7 +58,7 @@ Return ONLY valid JSON: {"reply":"student-facing Markdown","study":{"goal":null 
      lastNetworkError=true;
      lastDetail=e&&e.name==='AbortError'?'The Gemini request timed out.':'Could not reach the Gemini provider.';
      console.error('NEETOS Gemini transport failure model='+model+' attempt='+(attempt+1)+' kind='+(e&&e.name||'Error'));
-     if(attempt===0){await new Promise(resolve=>setTimeout(resolve,350));continue;}
+     if(attempt===0&&!(e&&e.name==='AbortError')){await new Promise(resolve=>setTimeout(resolve,350));continue;}
      break;
     }finally{clearTimeout(timer);}
     if(r.ok){
