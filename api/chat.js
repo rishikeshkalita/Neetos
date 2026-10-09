@@ -34,8 +34,15 @@ Return ONLY valid JSON: {"reply":"student-facing Markdown","study":{"goal":null 
    return res.status(502).json({error:'Gemini request failed ('+status+'): '+String(detail).slice(0,220)});
   }
   let parsed;
-  try{parsed=JSON.parse(raw)}catch(e){return res.status(502).json({error:'The AI response could not be parsed safely. Please retry.'});}
-  if(!parsed||typeof parsed.reply!=='string'||!parsed.study||typeof parsed.study!=='object')return res.status(502).json({error:'The AI response was incomplete. Please retry.'});
+  try{parsed=JSON.parse(raw)}catch(e){
+   const cleaned=raw.replace(/^\s*```(?:json)?\s*/i,'').replace(/\s*```\s*$/,'').trim();
+   const start=cleaned.indexOf('{'),end=cleaned.lastIndexOf('}');
+   if(start>=0&&end>start){try{parsed=JSON.parse(cleaned.slice(start,end+1))}catch(_){}}
+  }
+  if(!parsed||typeof parsed.reply!=='string'||!parsed.study||typeof parsed.study!=='object'){
+   console.error('NEETOS invalid JSON response',raw.slice(0,900));
+   return res.status(502).json({error:'The AI returned an incomplete plan. Your saved data is unchanged; tap Send to retry.'});
+  }
   return res.status(200).json({reply:parsed.reply,study:parsed.study});
  }catch(e){return res.status(502).json({error:'Network error while contacting the AI provider. Retry shortly.'});}
 }
