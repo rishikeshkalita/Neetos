@@ -27,6 +27,30 @@ input,textarea,select,button{font-size:16px}
 @media(max-width:760px){.app{padding:6px 8px calc(10px + env(safe-area-inset-bottom))}.top{align-items:center;padding-bottom:8px}.brand{font-size:16px;flex:1}.sub{max-width:120px}.top-actions{flex:0 0 auto}.top-actions .btn{font-size:12px;padding:7px 7px}.top-actions .status{display:none}.layout{grid-template-columns:minmax(0,1fr)}.side{display:none;order:-1}.side.open{display:block}.chat{min-height:calc(100dvh - 78px);min-height:calc(100svh - 78px)}.chat-head{padding:11px 12px}.messages{min-height:0;padding:12px 10px}.composer{padding:9px;gap:7px}.composer textarea{min-width:0}.composer button{flex:0 0 auto}.hub-grid{grid-template-columns:minmax(0,1fr)}}
 @media(max-width:390px){.brand{font-size:15px;gap:5px}.logo{width:30px;height:30px;flex-basis:30px}.sub{font-size:9px;max-width:100px}.top-actions{gap:4px}.top-actions .btn{font-size:11px;padding:7px 6px}.chat-head h1{font-size:16px}.chat-head p{font-size:11px}.composer button{padding:7px 9px}}
 
+
+/* Profile & Sync: a real compact settings view on mobile, not a long sidebar above chat. */
+@media(max-width:760px){
+ body.profile-open{overflow:hidden}
+ body.profile-open .top{position:sticky;top:0;z-index:20;background:var(--bg);padding:8px 0 10px}
+ body.profile-open .layout{display:block}
+ body.profile-open #chatPage,body.profile-open #hubPage{display:none!important}
+ body.profile-open #side{display:block!important;position:relative;order:0;width:100%;height:auto;max-height:none;overflow:visible;margin:0;padding:16px;border-radius:18px}
+ body.profile-open #side .divider:first-of-type{margin:14px 0}
+ body.profile-open #side .auth-card{padding:0}
+ body.profile-open #side .auth-card p{font-size:13px;line-height:1.45}
+ body.profile-open #side .field{margin:12px 0;gap:6px}
+ body.profile-open #side .field label{font-size:13px}
+ body.profile-open #side .field input{min-height:46px;padding:11px 12px;font-size:16px}
+ body.profile-open #side .auth-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+ body.profile-open #side .auth-row .btn{min-width:0;padding:10px 8px;font-size:14px}
+ body.profile-open #side #magicLink{padding:10px;font-size:14px}
+ body.profile-open #side #saveProfile{min-height:46px}
+ body.profile-open #side .task{padding:10px 11px;font-size:14px}
+ body.profile-open #side .task-controls{flex-wrap:wrap}
+ body.profile-open #side .notice{font-size:12px}
+ body.profile-open .footer{display:none}
+}
+
 </style>
 </head>
 <body><main class="app">
@@ -72,7 +96,7 @@ $('signUp').onclick=()=>authAction(async()=>{const email=$('email').value.trim()
 $('magicLink').onclick=()=>authAction(async()=>{const email=$('email').value.trim();if(!email)throw Error('Enter your email first.');const {error}=await db.auth.signInWithOtp({email,options:{emailRedirectTo:location.origin+'/'}});if(error){const msg=String(error.message||'');if(/rate limit|email rate limit/i.test(msg))throw Error('Supabase has temporarily rate-limited sign-in emails because too many were requested. Stop requesting links and wait for the limit to reset; then try once. If you previously set a password, use Sign in instead.');throw error;}note('authNotice','Sign-in link sent. Open it on this device. If it opens in Chrome, return to the installed app and tap the link button again only if needed. Once signed in, set a password in Account settings to use password sign-in next time.');});
 $('signOut').onclick=async()=>{if(db)await db.auth.signOut();session=null;setAuthUI();note('authNotice','Signed out. Your local data remains on this device.')};
 $('syncBtn').onclick=saveCloud;
-$('settingsBtn').onclick=()=>{$('settingsBtn').textContent=$('side').classList.toggle('open')?'Close profile':'Profile & sync';if($('side').classList.contains('open'))$('side').scrollIntoView({behavior:'smooth',block:'start'})};
+$('settingsBtn').onclick=()=>{const open=!document.body.classList.contains('profile-open');document.body.classList.toggle('profile-open',open);$('side').classList.toggle('open',open);$('settingsBtn').textContent=open?'Close profile':'Profile & sync';if(open){$('chatPage').classList.add('hidden');$('hubPage').classList.add('hidden');$('side').scrollIntoView({behavior:'auto',block:'start'});}else{$('chatPage').classList.remove('hidden');$('hubPage').classList.add('hidden');window.scrollTo({top:0,behavior:'auto'});}};
 $('setPassword').onclick=async()=>{if(!session||!db){note('cloudNotice','Sign in with your email link first, then set a password here.');return}const password=$('newPassword').value;if(password.length<8){note('cloudNotice','Choose a password with at least 8 characters.');return}const {error}=await db.auth.updateUser({password});if(error){note('cloudNotice',error.message);return}$('newPassword').value='';note('cloudNotice','Password set. You can now sign in with email and password on this device.')};
 $('accountBtn').onclick=()=>{if(!$('authCard').classList.contains('hidden'))$('email').focus();else $('signedCard').scrollIntoView({behavior:'smooth',block:'center'})};
 $('saveProfile').onclick=saveProfile;
@@ -80,7 +104,7 @@ $('addTask').onclick=()=>{const text=prompt('What task do you want to add?');if(
 $('resetTasks').onclick=()=>{if(confirm('Reset all checklist items? The current checklist will be kept in history.')){const h=read(KEYS.history,[]);h.push({date:new Date().toISOString().slice(0,10),tasks});localStorage.setItem(KEYS.history,JSON.stringify(h));tasks=tasks.map(t=>({...t,done:false}));persist();renderTasks();scheduleCloudSave()}};
 $('exportData').onclick=()=>{persist();const blob=new Blob([JSON.stringify({profile,history,tasks,taskHistory:read(KEYS.history,[])},null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='neetos-backup.json';a.click();URL.revokeObjectURL(a.href)};
 $('clearChat').onclick=()=>{if(confirm('Clear the chat transcript on this device? Saved goals and plans in Study Hub will not be deleted.')){history=[];persist();renderMessages();scheduleCloudSave()}};
-$('hubBtn').onclick=()=>{const opening=$('hubPage').classList.contains('hidden');$('hubPage').classList.toggle('hidden',!opening);$('chatPage').classList.toggle('hidden',opening);$('hubBtn').textContent=opening?'Back to chat':'Study Hub';if(opening)renderStudy()};
+$('hubBtn').onclick=()=>{if(document.body.classList.contains('profile-open')){document.body.classList.remove('profile-open');$('side').classList.remove('open');$('settingsBtn').textContent='Profile & sync';}const opening=$('hubPage').classList.contains('hidden');$('hubPage').classList.toggle('hidden',!opening);$('chatPage').classList.toggle('hidden',opening);$('side').classList.remove('open');$('hubBtn').textContent=opening?'Back to chat':'Study Hub';if(opening)renderStudy()};
 async function send(){const text=$('input').value.trim();if(!text||sending)return;sending=true;$('sendBtn').disabled=true;$('input').value='';history.push({role:'user',content:text});renderMessages();persist();scheduleCloudSave();const wait={role:'assistant',content:'Thinking…'};history.push(wait);renderMessages();try{const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:text,history:history.filter(m=>m!==wait).slice(0,-1).slice(-16),profile,tasks,study,today:new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0')+'-'+String(new Date().getDate()).padStart(2,'0')})});const d=await r.json();if(!r.ok)throw Error(d.error||'AI request failed (HTTP '+r.status+').');if(d.study&&typeof d.study==='object'){study={...study,...d.study};if(Array.isArray(study.dailyChecklist)){const day=new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0')+'-'+String(new Date().getDate()).padStart(2,'0');tasks=study.dailyChecklist.filter(t=>!t.date||t.date===day).map(t=>({text:t.task||t.title||'Study task',done:!!t.done}));renderTasks()}persist();renderStudy();scheduleCloudSave()}history[history.length-1]={role:'assistant',content:d.reply};}catch(e){const message=e instanceof TypeError?'Could not connect to NEETOS. Check your internet connection, then retry.':(e.message||'NEETOS could not complete that request. Please retry.');history[history.length-1]={role:'assistant',content:message}}finally{sending=false;$('sendBtn').disabled=false;persist();renderMessages();scheduleCloudSave();$('input').focus()}}
 $('sendBtn').onclick=send;$('input').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}});$('input').addEventListener('input',e=>{e.target.style.height='auto';e.target.style.height=Math.min(e.target.scrollHeight,130)+'px'});document.querySelectorAll('[data-prompt]').forEach(b=>b.onclick=()=>{$('input').value=b.dataset.prompt;$('input').focus()});
 fillProfile();renderTasks();renderMessages();renderStudy();persist();
