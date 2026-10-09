@@ -170,14 +170,17 @@ function mergeByKey(localRows,cloudRows,keyFn,preferLocal=false){
 function mergeStudyRecords(local,cloud){
   local=local&&typeof local==='object'?local:{};cloud=cloud&&typeof cloud==='object'?cloud:{};
   const merged={...cloud,...local};
-  for(const field of ['milestones','notes','tests','syllabus','revisions']){
-    merged[field]=mergeByKey(local[field],cloud[field],r=>r.id||r.taskId||(field==='tests'?(r.title||'')+'::'+(r.date||''):(r.subject||'')+'::'+(r.topic||r.title||r.details||'')));
+  for(const field of ['goal','activePlan','profileSummary']){
+    if(local[field]===null||local[field]===undefined||local[field]==='')merged[field]=cloud[field]??local[field];
+  }
+  for(const field of ['milestones','notes','tests','syllabus','revisions','dailyChecklist']){
+    merged[field]=mergeByKey(local[field],cloud[field],r=>r.id||r.taskId||(field==='tests'?(r.title||'')+'::'+(r.date||''):(r.date||'')+'::'+(r.subject||'')+'::'+(r.topic||r.title||r.task||r.details||'')));
   }
   return merged;
 }
 function mergeCloudSnapshot(data){
   const cloudProfile=data.profile||{},cloudChecklist=data.checklist||{};
-  profile={...cloudProfile,...profile};
+  profile={...cloudProfile,...Object.fromEntries(Object.entries(profile).filter(([k,v])=>v!==''&&v!==null&&v!==undefined))};
   history=mergeByKey(history,data.chat,m=>m.id||((m.role||'')+'::'+(m.createdAt||'')+'::'+(m.content||''))).slice(-200);
   tasks=mergeByKey(tasks,cloudChecklist.tasks,t=>t.taskId||((t.date||'')+'::'+String(t.text||t.task||'').toLowerCase()),true);
   taskHistory=mergeByKey(taskHistory,cloudChecklist.history,r=>(r.date||'')+'::'+(r.archivedAt||'' )).slice(-180);
