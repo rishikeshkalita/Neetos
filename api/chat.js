@@ -14,12 +14,25 @@ Return ONLY valid JSON: {"reply":"student-facing Markdown","study":{"goal":null 
  for(const m of (Array.isArray(history)?history:[]).slice(-16)){if(!m||!['user','assistant'].includes(m.role)||typeof m.content!=='string')continue;contents.push({role:m.role==='assistant'?'model':'user',parts:[{text:m.content.slice(0,5000)}]});}
  contents.push({role:'user',parts:[{text:message.trim().slice(0,5000)}]});
  try{
-  const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key='+encodeURIComponent(key),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({systemInstruction:{parts:[{text:system}]},contents,generationConfig:{temperature:.35,maxOutputTokens:2200,responseMimeType:'application/json'}})});
-  const data=await r.json().catch(()=>({}));
+  const endpoint='https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key='+encodeURIComponent(key);
+  const body=JSON.stringify({systemInstruction:{parts:[{text:system}]},contents,generationConfig:{temperature:.35,maxOutputTokens:2200,responseMimeType:'application/json'}});
+  let r,data={};
+  for(let attempt=0;attempt<3;attempt++){
+   try{r=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body});data=await r.json().catch(()=>({}));}
+   catch(e){if(attempt<2){await new Promise(resolve=>setTimeout(resolve,500*(attempt+1)));continue;}throw e;}
+   if(r.ok||![429,500,502,503,504].includes(r.status)||attempt===2)break;
+   await new Promise(resolve=>setTimeout(resolve,650*(attempt+1)));
+  }
   let raw='';
-  if(r.ok)raw=(data.candidates||[]).flatMap(c=>c.content?.parts||[]).map(p=>p.text||'').join('\n').trim();
-  else console.error('NEETOS Gemini API error',r.status,JSON.stringify(data).slice(0,1200));
-  if(!raw)return res.status(502).json({error:'Gemini could not complete this request. Check the Gemini API key and free-tier quota in Google AI Studio.'});
+  if(r&&r.ok)raw=(data.candidates||[]).flatMap(c=>c.content?.parts||[]).map(p=>p.text||'').join('\\n').trim();
+  else console.error('NEETOS Gemini API error',r&&r.status,JSON.stringify(data).slice(0,1200));
+  if(!raw){
+   const status=(r&&r.status)||502,detail=(data&&data.error&&data.error.message)||'Unknown provider error';
+   if(status===429)return res.status(429).json({error:'Gemini free-tier rate limit reached. Wait a little and retry; your saved plan was not changed.'});
+   if(status===503||status===504)return res.status(503).json({error:'Gemini is temporarily overloaded after automatic retries. Your saved plan was not changed; retry in a minute.'});
+   if(status===401||status===403)return res.status(503).json({error:'Gemini rejected the API key or its permissions. Check GEMINI_API_KEY in Vercel.'});
+   return res.status(502).json({error:'Gemini request failed ('+status+'): '+String(detail).slice(0,220)});
+  }
   let parsed;
   try{parsed=JSON.parse(raw)}catch(e){return res.status(502).json({error:'The AI response could not be parsed safely. Please retry.'});}
   if(!parsed||typeof parsed.reply!=='string'||!parsed.study||typeof parsed.study!=='object')return res.status(502).json({error:'The AI response was incomplete. Please retry.'});
