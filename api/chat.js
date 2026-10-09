@@ -17,8 +17,11 @@ Return ONLY valid JSON: {"reply":"student-facing Markdown","study":{"goal":null 
   const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key='+encodeURIComponent(key),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({systemInstruction:{parts:[{text:system}]},contents,generationConfig:{temperature:.35,maxOutputTokens:2200,responseMimeType:'application/json'}})});
   const data=await r.json().catch(()=>({}));
   if(!r.ok){const s=r.status;let msg='The AI service is temporarily unavailable.';if(s===429)msg='The AI service rate limit was reached. Wait a little and retry.';else if(s===400)msg='The AI request was rejected. Try shortening your message.';else if(s===403)msg='The AI service key or permissions need attention.';return res.status(s===429?429:502).json({error:msg,providerStatus:s});}
-  const reply=(data.candidates||[]).flatMap(c=>c.content?.parts||[]).map(p=>p.text||'').join('\n').trim();
-  if(!reply)return res.status(502).json({error:'The AI returned no text. Please retry.'});
-  return res.status(200).json({reply});
+  const raw=(data.candidates||[]).flatMap(c=>c.content?.parts||[]).map(p=>p.text||'').join('\n').trim();
+  if(!raw)return res.status(502).json({error:'The AI returned no text. Please retry.'});
+  let parsed;
+  try{parsed=JSON.parse(raw)}catch(e){return res.status(502).json({error:'The AI response could not be parsed safely. Please retry.'});}
+  if(!parsed||typeof parsed.reply!=='string'||!parsed.study||typeof parsed.study!=='object')return res.status(502).json({error:'The AI response was incomplete. Please retry.'});
+  return res.status(200).json({reply:parsed.reply,study:parsed.study});
  }catch(e){return res.status(502).json({error:'Network error while contacting the AI provider. Retry shortly.'});}
 }
