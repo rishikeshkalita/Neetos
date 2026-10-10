@@ -9,7 +9,7 @@ const plannerSandbox = {};
 vm.runInNewContext(plannerSource, plannerSandbox, { filename: 'test-planner.js' });
 const TEST_PLANNER = plannerSandbox.TEST_PLANNER;
 const source = fs.readFileSync(path.join(__dirname, '..', 'api', 'chat.js'), 'utf8')
-  .replace(/^import \\{ TEST_PLANNER \\} from '..\\/test-planner\\.js';\\s*/m, '')
+  .replace(/^import .*test-planner\.js';\s*/m, '')
   .replace(/^export default async function handler/m, 'module.exports = async function handler');
 const response = (status, body) => ({ ok: status >= 200 && status < 300, status, json: async () => body });
 function loadHandler(fetchMock, key = 'unit-test-key') {
