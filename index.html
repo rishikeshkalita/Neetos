@@ -211,7 +211,8 @@ function removeLegacyGenericPlan(){
  if(Array.isArray(study.dailyChecklist))study.dailyChecklist=study.dailyChecklist.filter(t=>!isLegacyGenericTask(t));
  if(tasks.length!==before)persist();
 }
-updateLocalClock();setInterval(()=>{const previous=localDay();updateLocalClock();if(previous!==localDay())renderStudy();},1000);\nfunction mentorFetch(payload){
+updateLocalClock();setInterval(()=>{const previous=localDay();updateLocalClock();if(previous!==localDay())renderStudy();},1000);
+function mentorFetch(payload){
  const options={method:'POST',cache:'no-store',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)};
  return (async()=>{let lastError;for(let attempt=0;attempt<2;attempt++){try{return await fetch('/api/chat',options)}catch(e){lastError=e;if(attempt===0&&navigator.onLine)await new Promise(resolve=>setTimeout(resolve,450));else break}}throw lastError||new TypeError('Mentor service could not be reached')})();
 }
