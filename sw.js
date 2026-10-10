@@ -1,5 +1,5 @@
-const CACHE='neetos-shell-v7';
-const SHELL=['/','/manifest.json'];
+const CACHE='neetos-shell-v8';
+const SHELL=['/','/manifest.json','/test-planner.js'];
 const STATIC_EXT=/\.(?:css|js|png|svg|webp|ico|woff2?)$/i;
 self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(SHELL)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
