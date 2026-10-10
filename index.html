@@ -79,7 +79,8 @@ input,textarea,select,button{font-size:16px}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 (() => {
-'use strict';\nlet importedPlanner=null;import('/test-planner.js').then(m=>{importedPlanner=m.TEST_PLANNER;renderStudy();}).catch(()=>{});
+'use strict';
+let importedPlanner=null;import('/test-planner.js').then(m=>{importedPlanner=m.TEST_PLANNER;renderStudy();}).catch(()=>{});
 const SUPABASE_URL='https://ypfrlglzblxcsilzkomx.supabase.co';
 const SUPABASE_KEY='sb_publishable_IA0LhNF6h_0g9VH1E1JaMw_TysZu4eq';
 const db=window.supabase?.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
