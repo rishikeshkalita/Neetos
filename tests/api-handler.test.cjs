@@ -74,5 +74,22 @@ const request = body => ({ method: 'POST', body: { message: 'Hi', history: [], p
     await handler({ method: 'POST', body: { message: '' } }, res);
     assert.equal(res.statusCode, 400);
   }
+
+  {
+    const calls = [];
+    const handler = loadHandler(async (url) => {
+      calls.push(url);
+      if (url.includes('gemini-3.5-flash-lite')) return response(200, { candidates: [{ content: { parts: [{ text: JSON.stringify({ reply: 'Third model recovered', study: { dailyChecklist: [] } }) }] } }] });
+      return response(503, { error: { message: 'temporarily overloaded' } });
+    });
+    const res = mockRes();
+    await handler(request(), res);
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.reply, 'Third model recovered');
+    assert.equal(calls.length, 5);
+    assert.match(calls[0], /gemini-3.8-flash/);
+    assert.match(calls[2], /gemini-3.6-flash/);
+    assert.match(calls[4], /gemini-3.5-flash-lite/);
+  }
   console.log('NEETOS API handler regression tests passed.');
 })().catch(error => { console.error(error); process.exitCode = 1; });
