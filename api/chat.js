@@ -32,7 +32,7 @@ Return ONLY valid JSON: {"reply":"student-facing Markdown","study":{"goal":null 
  else contents.push({role:'user',parts:[{text:latest}]});
 
  try{
-  const models=[process.env.GEMINI_MODEL||'gemini-3.8-flash','gemini-3.6-flash'].filter((model,index,list)=>model&&list.indexOf(model)===index);
+  const models=[process.env.GEMINI_MODEL||'gemini-3.8-flash','gemini-3.6-flash','gemini-3.5-flash-lite'].filter((model,index,list)=>model&&list.indexOf(model)===index);
   const body=JSON.stringify({
    systemInstruction:{parts:[{text:system}]},
    contents,
@@ -87,8 +87,8 @@ Return ONLY valid JSON: {"reply":"student-facing Markdown","study":{"goal":null 
    if(raw)break;
   }
   if(!raw){
-   if(lastStatus===429)return res.status(429).json({error:'The AI provider is rate-limiting requests. Wait briefly and retry; your saved plan was not changed.'});
-   if(lastStatus===503||lastStatus===504)return res.status(503).json({error:'The AI provider is temporarily overloaded. NEETOS retried and tried its fallback model; your saved plan was not changed. Retry shortly.'});
+   if(lastStatus===429)return res.status(429).json({error:'The AI provider is rate-limiting requests across all available models. Wait 30–60 seconds and retry; your saved plan was not changed.'});
+   if(lastStatus===503||lastStatus===504)return res.status(503).json({error:'All available AI models are temporarily overloaded. NEETOS retried three models; your saved plan was not changed. Wait 30–60 seconds and retry.'});
    if(lastNetworkError)return res.status(502).json({error:lastDetail+' NEETOS tried its available models, but could not get a response. Your saved plan was not changed.'});
    if(lastStatus===404)return res.status(503).json({error:'Neither configured Gemini model is available to this API key. Check model access in Google AI Studio.'});
    return res.status(502).json({error:'Gemini request failed ('+(lastStatus||'unknown status')+'): '+String(lastDetail).slice(0,220)+'. Your saved plan was not changed.'});
