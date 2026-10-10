@@ -20,7 +20,7 @@ assert.match(api, /thinkingLevel:'medium'/);
 assert.doesNotMatch(api, /temperature\s*:/);
 assert.match(api, /normalizedHistory/);
 assert.match(sw, /neetos-shell-v8/);
-assert.match(sw, /test-planner\\.js/);
+assert.match(sw, /test-planner\.js/);
 assert.match(api, /test-planner\.js/);
 assert.match(api, /Permanent imported test planner/);
 assert.match(html, /test-planner\.js/);
