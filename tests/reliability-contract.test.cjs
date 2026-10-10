@@ -13,6 +13,7 @@ assert.doesNotMatch(html, /function ensureRevisionQueue/);
 assert.doesNotMatch(html, /id="revisionQueue"/);
 assert.match(api, /gemini-3\.8-flash/);
 assert.match(api, /gemini-3\.6-flash/);
+assert.match(api, /gemini-3\.5-flash-lite/);
 assert.match(api, /x-goog-api-key/);
 assert.match(api, /AbortController/);
 assert.match(api, /thinkingLevel:'medium'/);
