@@ -4,12 +4,18 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
 const assert = require('node:assert/strict');
+const plannerSource = fs.readFileSync(path.join(__dirname, '..', 'test-planner.js'), 'utf8').replace('export const TEST_PLANNER =', 'globalThis.TEST_PLANNER =');
+const plannerSandbox = {};
+vm.runInNewContext(plannerSource, plannerSandbox, { filename: 'test-planner.js' });
+const TEST_PLANNER = plannerSandbox.TEST_PLANNER;
 const source = fs.readFileSync(path.join(__dirname, '..', 'api', 'chat.js'), 'utf8')
+  .replace(/^import \\{ TEST_PLANNER \\} from '..\\/test-planner\\.js';\\s*/m, '')
   .replace(/^export default async function handler/m, 'module.exports = async function handler');
 const response = (status, body) => ({ ok: status >= 200 && status < 300, status, json: async () => body });
 function loadHandler(fetchMock, key = 'unit-test-key') {
   const sandbox = {
     module: { exports: {} },
+    TEST_PLANNER,
     process: { env: key ? { GEMINI_API_KEY: key } : {} },
     fetch: fetchMock,
     AbortController,
