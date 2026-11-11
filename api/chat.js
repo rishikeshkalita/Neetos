@@ -37,7 +37,7 @@ Return ONLY valid JSON: {"reply":"student-facing Markdown","study":{"goal":null 
   const body=JSON.stringify({
    systemInstruction:{parts:[{text:system}]},
    contents,
-   generationConfig:{maxOutputTokens:6144,responseMimeType:'application/json',thinkingConfig:{thinkingLevel:'medium'}}
+   generationConfig:{maxOutputTokens:8192,responseMimeType:'application/json',thinkingConfig:{thinkingLevel:'medium'}}
   });
   const transientStatuses=[429,500,502,503,504];
   let raw='',lastStatus=0,lastDetail='No response from Gemini.',lastNetworkError=false;
@@ -100,10 +100,23 @@ Return ONLY valid JSON: {"reply":"student-facing Markdown","study":{"goal":null 
    const start=cleaned.indexOf('{'),end=cleaned.lastIndexOf('}');
    if(start>=0&&end>start){try{parsed=JSON.parse(cleaned.slice(start,end+1))}catch(_){}}
   }
-  if(!parsed||typeof parsed.reply!=='string'||!parsed.study||typeof parsed.study!=='object'){
+  if(!parsed||typeof parsed!=='object'||Array.isArray(parsed)||typeof parsed.reply!=='string'||!parsed.reply.trim()){
    console.error('NEETOS invalid JSON response',raw.slice(0,900));
-   return res.status(502).json({error:'The AI returned an incomplete plan. Your saved data is unchanged; tap Send to retry.'});
+   return res.status(502).json({error:'The AI response was incomplete or could not be parsed. Your saved data is unchanged; retry once.'});
   }
-  return res.status(200).json({reply:parsed.reply,study:parsed.study});
+  // Keep a valid mentor reply usable even if Gemini omits part of the structured study object.
+  // Preserve the existing checklist rather than clearing it when a response is schema-incomplete.
+  const returnedStudy=parsed.study&&typeof parsed.study==='object'&&!Array.isArray(parsed.study)?parsed.study:{};
+  const safeStudy={...study,...returnedStudy};
+  for(const field of ['milestones','notes','tests','syllabus','revisions']){
+   if(!Array.isArray(safeStudy[field]))safeStudy[field]=Array.isArray(study[field])?study[field]:[];
+  }
+  if(!Array.isArray(safeStudy.dailyChecklist)){
+   safeStudy.dailyChecklist=Array.isArray(tasks)?tasks.map(t=>({
+    task:t.text||t.task||'Study task',taskId:t.taskId,subject:t.subject||'General',
+    durationMinutes:Number(t.durationMinutes)||45,done:!!t.done,status:t.status||'unknown',date:t.date
+   })): [];
+  }
+  return res.status(200).json({reply:parsed.reply,study:safeStudy});
  }catch(e){return res.status(502).json({error:'Network error while contacting the AI provider. Retry shortly.'});}
 }
