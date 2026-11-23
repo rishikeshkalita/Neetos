@@ -56,58 +56,57 @@ Return ONLY valid JSON: {"reply":"student-facing Markdown","study":{"goal":null 
   });
   const transientStatuses=[429,500,502,503,504];
   let raw='',lastStatus=0,lastDetail='No response from Gemini.',lastNetworkError=false;
+  // Fail over immediately on capacity/rate-limit errors. Do not waste another
+  // 15-second retry against a model that has already failed.
   for(const model of models){
-   for(let attempt=0;attempt<2;attempt++){
-    const controller=new AbortController();
-    const timer=setTimeout(()=>controller.abort(),15000);
-    let r,data={};
-    try{
-     r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(model)+':generateContent',{
-      method:'POST',
-      headers:{'Content-Type':'application/json','x-goog-api-key':key},
-      body,
-      signal:controller.signal
-     });
-     data=await r.json().catch(()=>({}));
-    }catch(e){
-     lastStatus=0;
-     lastNetworkError=true;
-     lastDetail=e&&e.name==='AbortError'?'The Gemini request timed out.':'Could not reach the Gemini provider.';
-     console.error('NEETOS Gemini transport failure model='+model+' attempt='+(attempt+1)+' kind='+(e&&e.name||'Error'));
-     if(attempt===0&&!(e&&e.name==='AbortError')){await new Promise(resolve=>setTimeout(resolve,350));continue;}
-     break;
-    }finally{clearTimeout(timer);}
-    if(r.ok){
-     raw=(data.candidates||[]).flatMap(c=>c.content?.parts||[]).map(p=>p.text||'').join('\n').trim();
-     if(raw)break;
-     lastStatus=502;
-     lastDetail='Gemini returned an empty response.';
-     console.error('NEETOS Gemini empty response model='+model);
-     break;
-    }
-    lastStatus=r.status;
-    lastNetworkError=false;
+   const controller=new AbortController();
+   const timer=setTimeout(()=>controller.abort(),8500);
+   let r,data={};
+   try{
+    r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(model)+':generateContent',{
+     method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':key},body,signal:controller.signal
+    });
+    data=await r.json().catch(()=>({}));
+   }catch(e){
+    lastStatus=0;lastNetworkError=true;
+    lastDetail=e&&e.name==='AbortError'?'The AI model timed out.':'Could not reach the Gemini provider.';
+    console.error('NEETOS Gemini transport failure model='+model+' kind='+(e&&e.name||'Error'));
+   }finally{clearTimeout(timer);}
+   if(r&&r.ok){
+    raw=(data.candidates||[]).flatMap(c=>c.content?.parts||[]).map(p=>p.text||'').join('\n').trim();
+    if(raw)break;
+    lastStatus=502;lastDetail='Gemini returned an empty response.';
+    console.error('NEETOS Gemini empty response model='+model);
+   }else if(r){
+    lastStatus=r.status;lastNetworkError=false;
     lastDetail=(data&&data.error&&data.error.message)||'Unknown provider error';
     console.error('NEETOS Gemini API error model='+model+' status='+r.status+' '+JSON.stringify(data).slice(0,700));
-    if(r.status===401||r.status===403){
-     return res.status(503).json({error:'Gemini rejected the configured API key or permissions. Check GEMINI_API_KEY in Vercel.'});
-    }
-    if(transientStatuses.includes(r.status)){
-     if(attempt===0){await new Promise(resolve=>setTimeout(resolve,350));continue;}
-     break;
-    }
-    // A model-specific 400/404 can be bypassed by the supported fallback model.
-    if((r.status===400||r.status===404)&&model!==models[models.length-1])break;
-    break;
+    if(r.status===401||r.status===403)return res.status(503).json({error:'Gemini rejected the configured API key or permissions. Check GEMINI_API_KEY in Vercel.'});
    }
    if(raw)break;
+   // A model-specific invalid-model error can still be bypassed. Capacity,
+   // timeout and network errors also advance to the next configured model.
+  }
+  // Optional second-provider failover. Configure OPENAI_API_KEY in Vercel to
+  // enable this; NEETOS works with Gemini alone when it is not configured.
+  const openaiKey=process.env.OPENAI_API_KEY;
+  if(!raw&&openaiKey){
+   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),10000);
+   try{
+    const messages=[{role:'system',content:system},...contents.map(m=>({role:m.role==='model'?'assistant':'user',content:(m.parts||[]).map(p=>p.text||'').join('\n')}))];
+    const r=await fetch('https://api.openai.com/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+openaiKey},body:JSON.stringify({model:process.env.OPENAI_MODEL||'gpt-4o-mini',messages,response_format:{type:'json_object'},max_tokens:8192}),signal:controller.signal});
+    const data=await r.json().catch(()=>({}));
+    if(r.ok)raw=data.choices?.[0]?.message?.content||'';
+    else{lastStatus=r.status;lastDetail=data?.error?.message||'OpenAI fallback failed';console.error('NEETOS OpenAI fallback error status='+r.status+' '+JSON.stringify(data).slice(0,700));}
+   }catch(e){lastNetworkError=true;lastDetail=e&&e.name==='AbortError'?'The backup AI provider timed out.':'Could not reach the backup AI provider.';console.error('NEETOS OpenAI fallback transport failure kind='+(e&&e.name||'Error'));}
+   finally{clearTimeout(timer);}
   }
   if(!raw){
-   if(lastStatus===429)return res.status(429).json({error:'The AI provider is rate-limiting requests across all available models. Wait 30–60 seconds and retry; your saved plan was not changed.'});
-   if(lastStatus===503||lastStatus===504)return res.status(503).json({error:'All available AI models are temporarily overloaded. NEETOS retried three models; your saved plan was not changed. Wait 30–60 seconds and retry.'});
-   if(lastNetworkError)return res.status(502).json({error:lastDetail+' NEETOS tried its available models, but could not get a response. Your saved plan was not changed.'});
-   if(lastStatus===404)return res.status(503).json({error:'Neither configured Gemini model is available to this API key. Check model access in Google AI Studio.'});
-   return res.status(502).json({error:'Gemini request failed ('+(lastStatus||'unknown status')+'): '+String(lastDetail).slice(0,220)+'. Your saved plan was not changed.'});
+   if(lastStatus===429)return res.status(429).json({error:'AI services are rate-limiting requests. NEETOS tried its configured models and backup provider; wait briefly and retry. Your study data was not changed.'});
+   if(lastStatus===503||lastStatus===504)return res.status(503).json({error:'AI services are temporarily overloaded. NEETOS attempted model failover; your study data was not changed. Retry shortly.'});
+   if(lastNetworkError)return res.status(502).json({error:lastDetail+' NEETOS attempted its configured backups, but no provider responded. Your study data was not changed.'});
+   if(lastStatus===404)return res.status(503).json({error:'A configured AI model is unavailable to its API key. Check the model names and access in the provider dashboard.'});
+   return res.status(502).json({error:'AI request failed ('+(lastStatus||'unknown status')+'): '+String(lastDetail).slice(0,220)+'. Your study data was not changed.'});
   }
   let parsed;
   try{parsed=JSON.parse(raw)}catch(e){
