@@ -1,4 +1,6 @@
 import { TEST_PLANNER } from '../test-planner.js';
+// Vercel's default function duration is too short for sequential Gemini failover.
+export const config = { maxDuration: 60 };
 export default async function handler(req,res){
  res.setHeader('Cache-Control','no-store');
  if(req.method!=='POST'){res.setHeader('Allow','POST');return res.status(405).json({error:'Method not allowed'});}
