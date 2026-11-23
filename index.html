@@ -212,8 +212,9 @@ function removeLegacyGenericPlan(){
 updateLocalClock();setInterval(()=>{const previous=localDay();updateLocalClock();if(previous!==localDay())renderStudy();},1000);
 function mentorFetch(payload){
  const controller=new AbortController();activeMentorController=controller;
- const timer=setTimeout(()=>controller.abort(),50000);
- return fetch('/api/chat',{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:controller.signal}).finally(()=>{clearTimeout(timer);if(activeMentorController===controller)activeMentorController=null;});
+ let timer;const timeout=new Promise((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(new Error('Request timed out after 18 seconds. The AI server did not finish. Please retry.'));},18000);});
+ const request=fetch('/api/chat',{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:controller.signal});
+ return Promise.race([request,timeout]).finally(()=>{clearTimeout(timer);if(activeMentorController===controller)activeMentorController=null;});
 }
 if(history.length>=2){const last=history[history.length-1],prior=history[history.length-2];if(last&&last.role==='assistant'&&(last.transientError||isTransientFailureText(last.content))&&prior&&prior.role==='user')lastFailedText=prior.content;}
 removeLegacyGenericPlan();archivePreviousDay();fillProfile();renderTasks();renderMessages();renderStudy();persist();
