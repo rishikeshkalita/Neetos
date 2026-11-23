@@ -57,7 +57,7 @@ Return ONLY valid JSON: {"reply":"student-facing Markdown","study":{"goal":null 
    generationConfig:{maxOutputTokens:4096,responseMimeType:'application/json'}
   });
   const transientStatuses=[429,500,502,503,504];
-  let raw='',lastStatus=0,lastDetail='No response from Gemini.',lastNetworkError=false;
+  let raw='',lastStatus=0,lastDetail='No response from Gemini.',lastNetworkError=false;const attempts=[];
   // Try lightweight/free-tier models first and move on immediately after failure.
   for(const model of models){
    const controller=new AbortController();
@@ -71,16 +71,18 @@ Return ONLY valid JSON: {"reply":"student-facing Markdown","study":{"goal":null 
    }catch(e){
     lastStatus=0;lastNetworkError=true;
     lastDetail=e&&e.name==='AbortError'?'The AI model timed out.':'Could not reach the Gemini provider.';
+    attempts.push({model,kind:lastDetail});
     console.error('NEETOS Gemini transport failure model='+model+' kind='+(e&&e.name||'Error'));
    }finally{clearTimeout(timer);}
    if(r&&r.ok){
     raw=(data.candidates||[]).flatMap(c=>c.content?.parts||[]).map(p=>p.text||'').join('\n').trim();
     if(raw)break;
-    lastStatus=502;lastDetail='Gemini returned an empty response.';
+    lastStatus=502;lastDetail='Gemini returned an empty response.';attempts.push({model,status:502,detail:lastDetail});
     console.error('NEETOS Gemini empty response model='+model);
    }else if(r){
     lastStatus=r.status;lastNetworkError=false;
     lastDetail=(data&&data.error&&data.error.message)||'Unknown provider error';
+    attempts.push({model,status:r.status,detail:String(lastDetail).slice(0,180)});
     console.error('NEETOS Gemini API error model='+model+' status='+r.status+' '+JSON.stringify(data).slice(0,700));
     if(r.status===401||r.status===403)return res.status(503).json({error:'Gemini rejected the configured API key or permissions. Check GEMINI_API_KEY in Vercel.'});
    }
@@ -90,8 +92,8 @@ Return ONLY valid JSON: {"reply":"student-facing Markdown","study":{"goal":null 
   }
   // Free-tier Gemini-only provider strategy: no paid provider fallback.
   if(!raw){
-   if(lastStatus===429)return res.status(429).json({error:'Gemini is rate-limiting requests across available models. Wait briefly and retry. Your study data was not changed.'});
-   if(lastStatus===503||lastStatus===504)return res.status(503).json({error:'Gemini models are temporarily overloaded. NEETOS tried its available models; your study data was not changed. Retry shortly.'});
+   if(lastStatus===429)return res.status(429).json({error:'Gemini is rate-limiting requests. Your study data was not changed. Model diagnostics: '+attempts.map(a=>a.model+' '+(a.status||a.kind)+': '+(a.detail||'')).join(' | ')});
+   if(lastStatus===503||lastStatus===504)return res.status(503).json({error:'Gemini models are temporarily overloaded. Your study data was not changed. Model diagnostics: '+attempts.map(a=>a.model+' '+(a.status||a.kind)+': '+(a.detail||'')).join(' | ')});
    if(lastNetworkError)return res.status(502).json({error:lastDetail+' NEETOS tried its available Gemini models, but none responded. Your study data was not changed.'});
    if(lastStatus===404)return res.status(503).json({error:'A configured AI model is unavailable to its API key. Check the model names and access in the provider dashboard.'});
    return res.status(502).json({error:'AI request failed ('+(lastStatus||'unknown status')+'): '+String(lastDetail).slice(0,220)+'. Your study data was not changed.'});
