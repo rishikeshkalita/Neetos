@@ -87,24 +87,11 @@ Return ONLY valid JSON: {"reply":"student-facing Markdown","study":{"goal":null 
    // A model-specific invalid-model error can still be bypassed. Capacity,
    // timeout and network errors also advance to the next configured model.
   }
-  // Optional second-provider failover. Configure OPENAI_API_KEY in Vercel to
-  // enable this; NEETOS works with Gemini alone when it is not configured.
-  const openaiKey=process.env.OPENAI_API_KEY;
-  if(!raw&&openaiKey){
-   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),10000);
-   try{
-    const messages=[{role:'system',content:system},...contents.map(m=>({role:m.role==='model'?'assistant':'user',content:(m.parts||[]).map(p=>p.text||'').join('\n')}))];
-    const r=await fetch('https://api.openai.com/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+openaiKey},body:JSON.stringify({model:process.env.OPENAI_MODEL||'gpt-4o-mini',messages,response_format:{type:'json_object'},max_tokens:8192}),signal:controller.signal});
-    const data=await r.json().catch(()=>({}));
-    if(r.ok)raw=data.choices?.[0]?.message?.content||'';
-    else{lastStatus=r.status;lastDetail=data?.error?.message||'OpenAI fallback failed';console.error('NEETOS OpenAI fallback error status='+r.status+' '+JSON.stringify(data).slice(0,700));}
-   }catch(e){lastNetworkError=true;lastDetail=e&&e.name==='AbortError'?'The backup AI provider timed out.':'Could not reach the backup AI provider.';console.error('NEETOS OpenAI fallback transport failure kind='+(e&&e.name||'Error'));}
-   finally{clearTimeout(timer);}
-  }
+  // Free-tier Gemini-only provider strategy: no paid provider fallback.
   if(!raw){
-   if(lastStatus===429)return res.status(429).json({error:'AI services are rate-limiting requests. NEETOS tried its configured models and backup provider; wait briefly and retry. Your study data was not changed.'});
-   if(lastStatus===503||lastStatus===504)return res.status(503).json({error:'AI services are temporarily overloaded. NEETOS attempted model failover; your study data was not changed. Retry shortly.'});
-   if(lastNetworkError)return res.status(502).json({error:lastDetail+' NEETOS attempted its configured backups, but no provider responded. Your study data was not changed.'});
+   if(lastStatus===429)return res.status(429).json({error:'Gemini is rate-limiting requests across available models. Wait briefly and retry. Your study data was not changed.'});
+   if(lastStatus===503||lastStatus===504)return res.status(503).json({error:'Gemini models are temporarily overloaded. NEETOS tried its available models; your study data was not changed. Retry shortly.'});
+   if(lastNetworkError)return res.status(502).json({error:lastDetail+' NEETOS tried its available Gemini models, but none responded. Your study data was not changed.'});
    if(lastStatus===404)return res.status(503).json({error:'A configured AI model is unavailable to its API key. Check the model names and access in the provider dashboard.'});
    return res.status(502).json({error:'AI request failed ('+(lastStatus||'unknown status')+'): '+String(lastDetail).slice(0,220)+'. Your study data was not changed.'});
   }
