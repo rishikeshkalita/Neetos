@@ -48,19 +48,18 @@ Return ONLY valid JSON: {"reply":"student-facing Markdown","study":{"goal":null 
  else contents.push({role:'user',parts:[{text:latest}]});
 
  try{
-  const models=[process.env.GEMINI_MODEL||'gemini-3.8-flash','gemini-3.6-flash','gemini-3.5-flash-lite'].filter((model,index,list)=>model&&list.indexOf(model)===index);
+  const models=['gemini-2.5-flash-lite','gemini-3.5-flash-lite','gemini-3.6-flash','gemini-3.8-flash'].filter((model,index,list)=>model&&list.indexOf(model)===index);
   const body=JSON.stringify({
    systemInstruction:{parts:[{text:system}]},
    contents,
-   generationConfig:{maxOutputTokens:8192,responseMimeType:'application/json',thinkingConfig:{thinkingLevel:'medium'}}
+   generationConfig:{maxOutputTokens:4096,responseMimeType:'application/json'}
   });
   const transientStatuses=[429,500,502,503,504];
   let raw='',lastStatus=0,lastDetail='No response from Gemini.',lastNetworkError=false;
-  // Fail over immediately on capacity/rate-limit errors. Do not waste another
-  // 15-second retry against a model that has already failed.
+  // Try lightweight/free-tier models first and move on immediately after failure.
   for(const model of models){
    const controller=new AbortController();
-   const timer=setTimeout(()=>controller.abort(),8500);
+   const timer=setTimeout(()=>controller.abort(),6000);
    let r,data={};
    try{
     r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(model)+':generateContent',{
