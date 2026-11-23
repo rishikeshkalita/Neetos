@@ -137,7 +137,7 @@ async function send(){
  }
  lastFailedText=null;sending=true;$('sendBtn').disabled=true;$('input').value='';
  viewChatDate=localDay();history.push({role:'user',content:text,createdAt:new Date().toISOString()});renderMessages();persist();scheduleCloudSave();
- const wait={role:'assistant',content:'Thinking…'};history.push(wait);renderMessages();
+ const wait={role:'assistant',content:'Trying available AI providers…'};history.push(wait);renderMessages();
  try{
   const contextHistory=history.filter(m=>m!==wait).slice(0,-1).filter(m=>!m.transientError).slice(-16);
   const r=await mentorFetch({message:text,history:contextHistory,profile,tasks,taskHistory:taskHistory.slice(-30),study,...localNowContext(),today:localDay()});
@@ -148,7 +148,7 @@ async function send(){
   history[history.length-1]={role:'assistant',content:d.reply,createdAt:new Date().toISOString()};
   lastFailedText=null;
  }catch(e){
-  const message=e instanceof TypeError?(navigator.onLine?'The NEETOS API could not be reached after retrying. Your message is saved below and kept in the input for retry.':'You appear to be offline. Your message is saved below and kept in the input for retry.'):(e.message||'NEETOS could not complete that request. Please retry.');
+  const message=e&&e.name==='AbortError'?'NEETOS timed out while contacting the AI providers. Your message is saved and can be retried.':e instanceof TypeError?(navigator.onLine?'The NEETOS API could not be reached. Your message is saved below and kept in the input for retry.':'You appear to be offline. Your message is saved below and kept in the input for retry.'):(e.message||'NEETOS could not complete that request. Please retry.');
   history[history.length-1]={role:'assistant',content:message,transientError:true};
   lastFailedText=text;$('input').value=text;
  }finally{
@@ -211,8 +211,9 @@ function removeLegacyGenericPlan(){
 }
 updateLocalClock();setInterval(()=>{const previous=localDay();updateLocalClock();if(previous!==localDay())renderStudy();},1000);
 function mentorFetch(payload){
- const options={method:'POST',cache:'no-store',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)};
- return (async()=>{let lastError;for(let attempt=0;attempt<2;attempt++){try{return await fetch('/api/chat',options)}catch(e){lastError=e;if(attempt===0&&navigator.onLine)await new Promise(resolve=>setTimeout(resolve,450));else break}}throw lastError||new TypeError('Mentor service could not be reached')})();
+ const controller=new AbortController();
+ const timer=setTimeout(()=>controller.abort(),40000);
+ return fetch('/api/chat',{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal:controller.signal}).finally(()=>clearTimeout(timer));
 }
 if(history.length>=2){const last=history[history.length-1],prior=history[history.length-2];if(last&&last.role==='assistant'&&(last.transientError||isTransientFailureText(last.content))&&prior&&prior.role==='user')lastFailedText=prior.content;}
 removeLegacyGenericPlan();archivePreviousDay();fillProfile();renderTasks();renderMessages();renderStudy();persist();
