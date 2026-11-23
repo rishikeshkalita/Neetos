@@ -167,7 +167,8 @@ function mergeByKey(localRows,cloudRows,keyFn,preferLocal=false){
     map.set(key,b>=a?{...old,...row}:{...row,...old});
   }return [...map.values()];
 }
-function mergeChatArchives(local,cloud){const out={...(cloud&&typeof cloud==='object'?cloud:{})};for(const [date,rows] of Object.entries(local&&typeof local==='object'?local:{})){if(!Array.isArray(rows))continue;out[date]=mergeByKey(rows,out[date],m=>m.id||((m.role||'')+'::'+(m.createdAt||'')+'::'+(m.content||''))).slice(-200);}return out;}\nfunction mergeStudyRecords(local,cloud){
+function mergeChatArchives(local,cloud){const out={...(cloud&&typeof cloud==='object'?cloud:{})};for(const [date,rows] of Object.entries(local&&typeof local==='object'?local:{})){if(!Array.isArray(rows))continue;out[date]=mergeByKey(rows,out[date],m=>m.id||((m.role||'')+'::'+(m.createdAt||'')+'::'+(m.content||''))).slice(-200);}return out;}
+function mergeStudyRecords(local,cloud){
   local=local&&typeof local==='object'?local:{};cloud=cloud&&typeof cloud==='object'?cloud:{};
   const merged={...cloud,...local};
   for(const field of ['goal','activePlan','profileSummary']){
