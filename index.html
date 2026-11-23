@@ -128,31 +128,40 @@ $('hubBtn').onclick=()=>{if(document.body.classList.contains('profile-open')){do
 async function applyMentorResult(d){if(!d||!d.study||typeof d.study!=='object'||!Array.isArray(d.study.dailyChecklist))throw Error('The AI response did not include a valid daily checklist.');const previousStudy=JSON.parse(JSON.stringify(study));const incomingStudy=d.study;if(incomingStudy.dailyChecklist.length>40)throw Error('The AI returned too many tasks. No changes were saved.');for(const t of incomingStudy.dailyChecklist){if(!t||typeof (t.task||t.title)!=='string'||String(t.task||t.title).length>240)throw Error('The AI returned an invalid task. No changes were saved.');if(t.durationMinutes!==undefined&&(!Number.isFinite(Number(t.durationMinutes))||Number(t.durationMinutes)<5||Number(t.durationMinutes)>600))throw Error('The AI returned an invalid task duration. No changes were saved.');if(t.status&&!['planned','completed','partially_completed','missed','postponed','cancelled','unknown'].includes(t.status))throw Error('The AI returned an invalid task status. No changes were saved.');}study={...study,...incomingStudy};const day=localDay();const incoming=study.dailyChecklist.filter(t=>!t.date||t.date===day).map(t=>({text:t.task||t.title||'Study task',subject:t.subject||'General',durationMinutes:Number(t.durationMinutes)||45,done:!!t.done,status:t.status||(t.done?'completed':'planned'),date:day,taskId:t.taskId||undefined,createdAt:new Date().toISOString()}));const prior=new Map(tasks.map(t=>[String(t.task||t.text).toLowerCase().trim(),t]));tasks=incoming.map(t=>{const p=prior.get(t.text.toLowerCase().trim());return p?{...t,done:p.done?true:!!t.done,status:p.done?'completed':(t.status||p.status||(t.done?'completed':'planned')),completedAt:p.completedAt||(t.done?new Date().toISOString():null),taskId:t.taskId||p.taskId,createdAt:p.createdAt||t.createdAt}:t});localStorage.setItem(KEYS.day,day);persist();renderTasks();renderStudy();scheduleCloudSave();return incoming.length}
 async function generateDailyPlan(reason='daily refresh'){const day=localDay(),guardKey='neetos_auto_plan_attempt_v1';if(localStorage.getItem(guardKey)===day||sending)return;localStorage.setItem(guardKey,day);note('taskNotice','Building today’s plan from your saved routine, upcoming tests and history…');try{const r=await mentorFetch({message:'Create today’s realistic NEET study checklist automatically. Use my saved routine, current date, all relevant recent daily task history, known upcoming tests and their syllabi. Account for fixed coaching/errands, rest and available study time. If my known future schedule has gaps, make a provisional plan and clearly state assumptions. This is an automatic '+reason+'; do not ask me to repeat information already saved.',history:[],profile,tasks,taskHistory:taskHistory.slice(-30),study,...localNowContext(),today:day});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||'AI request failed (HTTP '+r.status+').');const count=await applyMentorResult(d);if(d.reply){history.push({role:'assistant',content:'**Today’s plan is ready.**\n\n'+d.reply});history=history.slice(-120);persist();renderMessages()}note('taskNotice',count?'AI plan created from your saved study context.':'NEETOS responded, but no tasks were scheduled for today. Update your routine or ask for a plan.')}catch(e){localStorage.removeItem(guardKey);note('taskNotice','Could not generate today’s plan: '+(e.message||'AI unavailable')+'. Your checklist was not changed. Retry when the mentor is available.');}}
 async function send(){
- const text=$('input').value.trim();if(!text||sending)return;
- if(lastFailedText===text){
-  const last=history[history.length-1];
-  if(last&&last.role==='assistant'&&(last.transientError||isTransientFailureText(last.content)))history.pop();
-  const prior=history[history.length-1];
-  if(prior&&prior.role==='user'&&prior.content===text)history.pop();
- }
- lastFailedText=null;sending=true;$('sendBtn').disabled=true;$('input').value='';
- viewChatDate=localDay();history.push({role:'user',content:text,createdAt:new Date().toISOString()});renderMessages();persist();scheduleCloudSave();
- const wait={role:'assistant',content:'Trying available AI providers…'};history.push(wait);renderMessages();
+ const input=$('input'),btn=$('sendBtn');
+ const text=input.value.trim();if(!text||sending)return;
+ sending=true;btn.disabled=true;lastFailedText=null;
+ let wait=null,userMsg=null;
  try{
-  const contextHistory=history.filter(m=>m!==wait).slice(0,-1).filter(m=>!m.transientError).slice(-16);
+  if(lastFailedText===text){
+   const last=history[history.length-1];
+   if(last&&last.role==='assistant'&&(last.transientError||isTransientFailureText(last.content)))history.pop();
+   const prior=history[history.length-1];if(prior&&prior.role==='user'&&prior.content===text)history.pop();
+  }
+  viewChatDate=localDay();input.value='';
+  userMsg={role:'user',content:text,createdAt:new Date().toISOString()};history.push(userMsg);
+  persist();scheduleCloudSave();renderMessages();
+  wait={role:'assistant',content:'Trying available AI providers…'};history.push(wait);renderMessages();
+  const contextHistory=history.filter(m=>m!==wait&&m!==userMsg&&!m.transientError).slice(-16);
   const r=await mentorFetch({message:text,history:contextHistory,profile,tasks,taskHistory:taskHistory.slice(-30),study,...localNowContext(),today:localDay()});
   const d=await r.json().catch(()=>({error:'The mentor returned an unreadable response.'}));
   if(!r.ok)throw Error(d.error||'AI request failed (HTTP '+r.status+').');
   if(typeof d.reply!=='string'||!d.reply.trim())throw Error('The mentor returned an empty reply. Your message remains available to retry.');
   if(d.study&&typeof d.study==='object')await applyMentorResult(d);
-  history[history.length-1]={role:'assistant',content:d.reply,createdAt:new Date().toISOString()};
+  const wi=history.indexOf(wait);
+  if(wi>=0)history[wi]={role:'assistant',content:d.reply,createdAt:new Date().toISOString()};
+  else history.push({role:'assistant',content:d.reply,createdAt:new Date().toISOString()});
   lastFailedText=null;
  }catch(e){
-  const message=e&&e.name==='AbortError'?'NEETOS timed out while contacting the AI providers. Your message is saved and can be retried.':e instanceof TypeError?(navigator.onLine?'The NEETOS API could not be reached. Your message is saved below and kept in the input for retry.':'You appear to be offline. Your message is saved below and kept in the input for retry.'):(e.message||'NEETOS could not complete that request. Please retry.');
-  history[history.length-1]={role:'assistant',content:message,transientError:true};
-  lastFailedText=text;$('input').value=text;
+  const message=e&&e.name==='AbortError'?'NEETOS timed out contacting the AI server.':e instanceof TypeError?(navigator.onLine?'The API could not be reached.':'You appear to be offline.'):(e.message||'NEETOS request failed.');
+  const wi=wait?history.indexOf(wait):-1;
+  const failure={role:'assistant',content:message,transientError:true,createdAt:new Date().toISOString()};
+  if(wi>=0)history[wi]=failure;else if(userMsg&&history.includes(userMsg))history.push(failure);
+  lastFailedText=text;input.value=text;
  }finally{
-  sending=false;$('sendBtn').disabled=false;persist();renderMessages();scheduleCloudSave();$('input').focus();
+  sending=false;
+  try{btn.disabled=false;persist();renderMessages();scheduleCloudSave();input.focus();}
+  catch(uiError){console.error('NEETOS UI recovery error',uiError);btn.disabled=false;input.disabled=false;}
  }
 }
 $('sendBtn').onclick=send;$('input').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}});$('input').addEventListener('input',e=>{e.target.style.height='auto';e.target.style.height=Math.min(e.target.scrollHeight,130)+'px'});document.querySelectorAll('[data-prompt]').forEach(b=>b.onclick=()=>{$('input').value=b.dataset.prompt;$('input').focus()});
