@@ -94,9 +94,9 @@ Return ONLY valid JSON: {"reply":"student-facing Markdown","study":{"goal":null 
   if(!raw){
    if(lastStatus===429)return res.status(429).json({error:'Gemini is rate-limiting requests. Your study data was not changed. Model diagnostics: '+attempts.map(a=>a.model+' '+(a.status||a.kind)+': '+(a.detail||'')).join(' | ')});
    if(lastStatus===503||lastStatus===504)return res.status(503).json({error:'Gemini models are temporarily overloaded. Your study data was not changed. Model diagnostics: '+attempts.map(a=>a.model+' '+(a.status||a.kind)+': '+(a.detail||'')).join(' | ')});
-   if(lastNetworkError)return res.status(502).json({error:lastDetail+' NEETOS tried its available Gemini models, but none responded. Your study data was not changed.'});
+   if(lastNetworkError)return res.status(502).json({error:lastDetail+' Model diagnostics: '+attempts.map(a=>a.model+' '+(a.status||a.kind)+': '+(a.detail||'')).join(' | ')});
    if(lastStatus===404)return res.status(503).json({error:'A configured AI model is unavailable to its API key. Check the model names and access in the provider dashboard.'});
-   return res.status(502).json({error:'AI request failed ('+(lastStatus||'unknown status')+'): '+String(lastDetail).slice(0,220)+'. Your study data was not changed.'});
+   return res.status(502).json({error:'AI request failed ('+(lastStatus||'unknown status')+'): '+String(lastDetail).slice(0,220)+'. Model diagnostics: '+attempts.map(a=>a.model+' '+(a.status||a.kind)+': '+(a.detail||'')).join(' | ')});
   }
   let parsed;
   try{parsed=JSON.parse(raw)}catch(e){
