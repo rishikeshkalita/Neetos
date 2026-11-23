@@ -61,7 +61,7 @@ Return ONLY valid JSON: {"reply":"student-facing Markdown","study":{"goal":null 
   // Try lightweight/free-tier models first and move on immediately after failure.
   for(const model of models){
    const controller=new AbortController();
-   const timer=setTimeout(()=>controller.abort(),12000);
+   const timer=setTimeout(()=>controller.abort(),8000);
    let r,data={};
    try{
     r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(model)+':generateContent',{
