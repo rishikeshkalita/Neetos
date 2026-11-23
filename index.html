@@ -130,10 +130,11 @@ async function generateDailyPlan(reason='daily refresh'){const day=localDay(),gu
 async function send(){
  const input=$('input'),btn=$('sendBtn');
  const text=input.value.trim();if(!text||sending)return;
+ const retrying=lastFailedText===text;
  sending=true;btn.disabled=true;lastFailedText=null;
  let wait=null,userMsg=null;
  try{
-  if(lastFailedText===text){
+  if(retrying){
    const last=history[history.length-1];
    if(last&&last.role==='assistant'&&(last.transientError||isTransientFailureText(last.content)))history.pop();
    const prior=history[history.length-1];if(prior&&prior.role==='user'&&prior.content===text)history.pop();
