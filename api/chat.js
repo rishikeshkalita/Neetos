@@ -50,7 +50,7 @@ Return ONLY valid JSON: {"reply":"student-facing Markdown","study":{"goal":null 
  else contents.push({role:'user',parts:[{text:latest}]});
 
  try{
-  const models=['gemini-3.6-flash','gemini-3.5-flash-lite','gemini-3.8-flash'].filter((model,index,list)=>model&&list.indexOf(model)===index);
+  const models=['gemini-3.5-flash-lite','gemini-3.6-flash','gemini-3.8-flash'].filter((model,index,list)=>model&&list.indexOf(model)===index);
   const body=JSON.stringify({
    systemInstruction:{parts:[{text:system}]},
    contents,
@@ -61,7 +61,7 @@ Return ONLY valid JSON: {"reply":"student-facing Markdown","study":{"goal":null 
   // Try lightweight/free-tier models first and move on immediately after failure.
   for(const model of models){
    const controller=new AbortController();
-   const timer=setTimeout(()=>controller.abort(),6000);
+   const timer=setTimeout(()=>controller.abort(),12000);
    let r,data={};
    try{
     r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(model)+':generateContent',{
